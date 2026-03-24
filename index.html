@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Ultimate Studio</title>
+
+<!-- PWA META -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#00ffff">
+<meta name="description" content="Ultimate Studio - Pro Video Editor with AI Effects">
+
+<!-- MANIFEST -->
+<link rel="manifest" href="manifest.json">
+
+<style>
+body{
+  margin:0;
+  background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
+  color:white;
+  font-family:sans-serif;
+  text-align:center;
+}
+
+.box{
+  background:rgba(255,255,255,0.08);
+  margin:10px;
+  padding:10px;
+  border-radius:15px;
+}
+
+button{
+  padding:8px 12px;
+  margin:5px;
+  border:none;
+  border-radius:10px;
+  background:linear-gradient(45deg,cyan,purple);
+  color:white;
+  cursor:pointer;
+  transition:0.2s;
+}
+button:hover{transform:scale(1.1)}
+
+video{
+  width:90%;
+  border-radius:15px;
+  box-shadow:0 0 20px cyan;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🔥 Ultimate Studio</h1>
+
+<div class="box">
+<input type="file" id="videos" multiple>
+<input type="file" id="music">
+<input id="text" placeholder="Text">
+</div>
+
+<div class="box">
+<h3>Effects</h3>
+<button onclick="setEffect('phonk')">Phonk</button>
+<button onclick="setEffect('shake')">Shake</button>
+<button onclick="setEffect('flash')">Flash</button>
+<button onclick="setEffect('fade')">Fade</button>
+</div>
+
+<div class="box">
+<h3>Controls</h3>
+Zoom <input type="range" id="zoom" min="1" max="2" step="0.1" value="1.1">
+Shake <input type="range" id="shake" min="0" max="20" value="5">
+Speed <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
+Brightness <input type="range" id="bright" min="0.5" max="2" step="0.1" value="1">
+Volume <input type="range" id="volume" min="0" max="1" step="0.1" value="1">
+</div>
+
+<div class="box">
+<h3>Timeline</h3>
+Start <input type="range" id="start" min="0" max="100" value="0">
+End <input type="range" id="end" min="0" max="100" value="100">
+</div>
+
+<div class="box">
+<button onclick="video.play()">Play</button>
+<button onclick="video.pause()">Pause</button>
+<button onclick="video.loop=true">Loop</button>
+</div>
+
+<div class="box">
+<button onclick="autoEdit()">🤖 AI Edit</button>
+<button onclick="start()">Start</button>
+<button onclick="download()">Download</button>
+</div>
+
+<video id="video" controls></video>
+<audio id="audio"></audio>
+<canvas id="canvas"></canvas>
+
+<script>
+
+// VARIABLES
+let effect="phonk", clips=[], current=0;
+let recorder,chunks=[];
+
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const audio=document.getElementById("audio");
+
+// LOAD
+videos.onchange=e=>clips=[...e.target.files].map(f=>URL.createObjectURL(f));
+music.onchange=e=>audio.src=URL.createObjectURL(e.target.files[0]);
+
+function setEffect(e){effect=e;}
+
+// AI
+function autoEdit(){
+let fx=["phonk","shake","flash","fade"];
+effect=fx[Math.floor(Math.random()*fx.length)];
+
+zoom.value=1+Math.random();
+shake.value=Math.random()*20;
+speed.value=0.5+Math.random()*1.5;
+bright.value=0.5+Math.random()*1.5;
+
+start.value=Math.random()*50;
+end.value=50+Math.random()*50;
+}
+
+// NEXT VIDEO
+video.onended=()=>{
+if(current<clips.length){
+video.src=clips[current++];
+video.play();
+}
+};
+
+// START
+function start(){
+canvas.width=720;
+canvas.height=1280;
+
+const stream=canvas.captureStream();
+recorder=new MediaRecorder(stream);
+
+recorder.ondataavailable=e=>chunks.push(e.data);
+recorder.onstop=()=>window.url=URL.createObjectURL(new Blob(chunks));
+
+recorder.start();
+audio.play();
+
+current=0;
+video.src=clips[current++];
+video.play();
+
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+// FILTER
+ctx.filter="brightness("+bright.value+") contrast(1.3) saturate(1.3)";
+
+// SPEED + VOLUME
+video.playbackRate=speed.value;
+audio.volume=volume.value;
+
+let frame=video.currentTime*60;
+let scale=1,x=0,y=0;
+
+if(effect==="phonk"){
+scale=1+Math.sin(frame*0.2)*zoom.value;
+}
+
+if(effect==="shake"){
+x=Math.random()*shake.value-shake.value/2;
+y=Math.random()*shake.value-shake.value/2;
+}
+
+// DRAW
+ctx.save();
+ctx.translate(x,y);
+ctx.scale(scale,scale);
+ctx.drawImage(video,0,0,canvas.width,canvas.height);
+ctx.restore();
+
+// FLASH
+if(effect==="flash"){
+ctx.fillStyle="rgba(255,255,255,0.2)";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+// FADE
+if(effect==="fade"){
+ctx.fillStyle="rgba(0,0,0,"+(Math.sin(frame*0.05)+1)/2+")";
+ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+// TEXT
+ctx.fillStyle="white";
+ctx.font="40px Arial";
+ctx.fillText(text.value,50,60);
+
+// TRIM
+let s=start.value/100*video.duration;
+let e=end.value/100*video.duration;
+
+if(video.currentTime<s || video.currentTime>e){
+video.pause();
+audio.pause();
+}
+
+if(!video.ended || current<clips.length){
+requestAnimationFrame(draw);
+}else{
+recorder.stop();
+}
+}
+draw();
+}
+
+// DOWNLOAD
+function download(){
+if(window.url){
+let a=document.createElement("a");
+a.href=window.url;
+a.download="final.mp4";
+a.click();
+}else{
+alert("Edit first");
+}
+}
+
+</script>
+
+</body>
+</html>
